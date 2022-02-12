@@ -291,5 +291,5 @@ func Execute() error {
 func init() {
 	rootCmd.PersistentFlags().StringVar(&to, "to", "", "address to point to in a host:ip format (eg. 10.0.100.10:8080)")
 	rootCmd.PersistentFlags().StringVar(&namespace, "namespace", "", "Namespace where you want the ingress/service to be created. if unassigned, uses current-context's namespace")
-	rootCmd.PersistentFlags().BoolVar(&tlsAuto, "tls-auto", true, "Set true if want to use cert-manager to automatically assign a tls cert")
+	rootCmd.PersistentFlags().BoolVar(&tlsAuto, "tls-auto", false, "Set true if want to use cert-manager to automatically assign a tls cert")
 }
