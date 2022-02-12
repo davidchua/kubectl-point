@@ -18,6 +18,8 @@ And then mv the generated binary to your `/usr/local/bin/kubectl-point`
 
 ## Usage
 
+![kubectl-point](https://user-images.githubusercontent.com/68039/153701096-49681e5f-edc8-45f3-8e71-58441e6334f0.gif)
+
 `kubectl point example.org --to=10.0.0.1:8080`
 
 This creates an `Ingress`, a headless `Service` and custom `Endpoint` on your cluster that accepts a http call to `example.org` and redirects them to `10.0.0.1:8080`
