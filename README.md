@@ -20,21 +20,16 @@ And then mv the generated binary to your `/usr/local/bin/kubectl-point`
 
 ![kubectl-point](https://user-images.githubusercontent.com/68039/153701096-49681e5f-edc8-45f3-8e71-58441e6334f0.gif)
 
-`kubectl point example.org --to=10.0.0.1:8080`
-
 This creates an `Ingress`, a headless `Service` and custom `Endpoint` on your cluster that accepts a http call to `example.org` and redirects them to `10.0.0.1:8080`
-
-`kubectl point example.org --to=10.0.0.1:8080 --tls-auto`
+- `kubectl point example.org --to=10.0.0.1:8080`
 
 This creates an ingress for `example.org` that listens on both http and https and redirects them to `10.0.0.1:8080` and also attempts to generate the necessary tls certs with `cert-manager`. If your cluster does not have `cert-manager` (v1) installed, this command will error out.
+- `kubectl point example.org --to=10.0.0.1:8080 --tls-auto`
 
 ## Coming Soon
 
-`kubectl point example.org --to=10.0.0.1:8080 --tls-dir=/certs`
-
 This looks for a `tls.key` and `tls.crt` in `/certs` and uses them to configure tls on your ingress controller
-
-`kubectl point example.org --to=10.0.0.1:8080 --tls-key=/certs/tls.key --tls-cert=/certs/tls.crt`
+- `kubectl point example.org --to=10.0.0.1:8080 --tls-dir=/certs`
 
 Use the `--tls-key` and `--tls-cert` flag to specify the tls.key and tls.crt that will be sent to the ingress controller
-
+- `kubectl point example.org --to=10.0.0.1:8080 --tls-key=/certs/tls.key --tls-cert=/certs/tls.crt`
