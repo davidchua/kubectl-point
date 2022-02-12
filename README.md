@@ -26,7 +26,9 @@ This creates an `Ingress`, a headless `Service` and custom `Endpoint` on your cl
 
 `kubectl point example.org --to=10.0.0.1:8080 --tls-auto`
 
-This creates an ingress for `example.org` that listens on both http and https and redirects them to `10.0.0.1:8080` and also attempts to generate the necessary tls certs with `cert-manager`. If your cluster does not have `cert-manager` installed, this command will error out.
+This creates an ingress for `example.org` that listens on both http and https and redirects them to `10.0.0.1:8080` and also attempts to generate the necessary tls certs with `cert-manager`. If your cluster does not have `cert-manager` (v1) installed, this command will error out.
+
+## Coming Soon
 
 `kubectl point example.org --to=10.0.0.1:8080 --tls-dir=/certs`
 
