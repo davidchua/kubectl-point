@@ -242,10 +242,10 @@ var (
 			if tlsAuto && selectedIssuer != "" {
 				ingress.Annotations = make(map[string]string)
 				ingress.Annotations["cert-manager.io/cluster-issuer"] = selectedIssuer
-				sub := fmt.Sprintf("%s-tls", subject)
+				tlsSecret := fmt.Sprintf("%s-tls", strings.Replace(subject, ".", "-", -1))
 				tlsSpec := networkingv1apply.IngressTLSApplyConfiguration{
-					Hosts:      []string{sub},
-					SecretName: &sub,
+					Hosts:      []string{subject},
+					SecretName: &tlsSecret,
 				}
 				ingress.Spec.TLS = []networkingv1apply.IngressTLSApplyConfiguration{tlsSpec}
 
