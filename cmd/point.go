@@ -32,6 +32,7 @@ var (
 	to             string
 	selectedIssuer string
 	tlsAuto        bool
+	noIngress      bool
 	namespace      string
 	kubeconfig     *string
 	rootCmd        = &cobra.Command{
@@ -73,7 +74,7 @@ var (
 			}
 
 			subject := args[0]
-			sanitized, err := sanitize(subject)
+			sanitized, err := sanitize(subject, noIngress)
 			if err != nil {
 				log.Fatalf("❌ error sanitizing domain name: %#v", err)
 			}
@@ -199,33 +200,35 @@ var (
 
 			log.Printf("🎁 Endpoint successfully applied")
 
-			pathType := networkingv1.PathTypeExact
-			defaultPath := "/"
+			if !noIngress {
+				pathType := networkingv1.PathTypeExact
+				defaultPath := "/"
 
-			kindStr = "Ingress"
-			apiversionStr = "networking.k8s.io/v1"
+				kindStr = "Ingress"
+				apiversionStr = "networking.k8s.io/v1"
 
-			ingress := &networkingv1apply.IngressApplyConfiguration{
-				TypeMetaApplyConfiguration: metav1apply.TypeMetaApplyConfiguration{Kind: &kindStr, APIVersion: &apiversionStr},
-				ObjectMetaApplyConfiguration: &metav1apply.ObjectMetaApplyConfiguration{
-					Name:      &sanitized,
-					Namespace: &namespace,
-				},
-				Spec: &networkingv1apply.IngressSpecApplyConfiguration{
-					Rules: []networkingv1apply.IngressRuleApplyConfiguration{
-						networkingv1apply.IngressRuleApplyConfiguration{
-							Host: &subject,
-							IngressRuleValueApplyConfiguration: networkingv1apply.IngressRuleValueApplyConfiguration{
-								HTTP: &networkingv1apply.HTTPIngressRuleValueApplyConfiguration{
-									Paths: []networkingv1apply.HTTPIngressPathApplyConfiguration{
-										networkingv1apply.HTTPIngressPathApplyConfiguration{
-											Path:     &defaultPath,
-											PathType: &pathType,
-											Backend: &networkingv1apply.IngressBackendApplyConfiguration{
-												Service: &networkingv1apply.IngressServiceBackendApplyConfiguration{
-													Name: &sanitized,
-													Port: &networkingv1apply.ServiceBackendPortApplyConfiguration{
-														Number: &port,
+				ingress := &networkingv1apply.IngressApplyConfiguration{
+					TypeMetaApplyConfiguration: metav1apply.TypeMetaApplyConfiguration{Kind: &kindStr, APIVersion: &apiversionStr},
+					ObjectMetaApplyConfiguration: &metav1apply.ObjectMetaApplyConfiguration{
+						Name:      &sanitized,
+						Namespace: &namespace,
+					},
+					Spec: &networkingv1apply.IngressSpecApplyConfiguration{
+						Rules: []networkingv1apply.IngressRuleApplyConfiguration{
+							networkingv1apply.IngressRuleApplyConfiguration{
+								Host: &subject,
+								IngressRuleValueApplyConfiguration: networkingv1apply.IngressRuleValueApplyConfiguration{
+									HTTP: &networkingv1apply.HTTPIngressRuleValueApplyConfiguration{
+										Paths: []networkingv1apply.HTTPIngressPathApplyConfiguration{
+											networkingv1apply.HTTPIngressPathApplyConfiguration{
+												Path:     &defaultPath,
+												PathType: &pathType,
+												Backend: &networkingv1apply.IngressBackendApplyConfiguration{
+													Service: &networkingv1apply.IngressServiceBackendApplyConfiguration{
+														Name: &sanitized,
+														Port: &networkingv1apply.ServiceBackendPortApplyConfiguration{
+															Number: &port,
+														},
 													},
 												},
 											},
@@ -235,29 +238,29 @@ var (
 							},
 						},
 					},
-				},
-			}
-
-			// check if --tls=auto is on. if it is, set it to use cert-manager
-			if tlsAuto && selectedIssuer != "" {
-				ingress.Annotations = make(map[string]string)
-				ingress.Annotations["cert-manager.io/cluster-issuer"] = selectedIssuer
-				tlsSecret := fmt.Sprintf("%s-tls", strings.Replace(subject, ".", "-", -1))
-				tlsSpec := networkingv1apply.IngressTLSApplyConfiguration{
-					Hosts:      []string{subject},
-					SecretName: &tlsSecret,
 				}
-				ingress.Spec.TLS = []networkingv1apply.IngressTLSApplyConfiguration{tlsSpec}
 
+				// check if --tls=auto is on. if it is, set it to use cert-manager
+				if tlsAuto && selectedIssuer != "" {
+					ingress.Annotations = make(map[string]string)
+					ingress.Annotations["cert-manager.io/cluster-issuer"] = selectedIssuer
+					tlsSecret := fmt.Sprintf("%s-tls", strings.Replace(subject, ".", "-", -1))
+					tlsSpec := networkingv1apply.IngressTLSApplyConfiguration{
+						Hosts:      []string{subject},
+						SecretName: &tlsSecret,
+					}
+					ingress.Spec.TLS = []networkingv1apply.IngressTLSApplyConfiguration{tlsSpec}
+
+				}
+
+				_, err = client.NetworkingV1().Ingresses(namespace).Apply(context.TODO(), ingress, metav1.ApplyOptions{FieldManager: "point"})
+
+				if err != nil {
+					log.Fatalf("❌ error creating ingress: %#v", err)
+				}
+
+				fmt.Printf("❤ Ingress successfully applied, you can now access it from \033[1;36mhttp://%s\n", args[0])
 			}
-
-			_, err = client.NetworkingV1().Ingresses(namespace).Apply(context.TODO(), ingress, metav1.ApplyOptions{FieldManager: "point"})
-
-			if err != nil {
-				log.Fatalf("❌ error creating ingress: %#v", err)
-			}
-
-			fmt.Printf("❤ Ingress successfully applied, you can now access it from \033[1;36mhttp://%s\n", args[0])
 		},
 	}
 )
@@ -266,10 +269,12 @@ var (
 // object label. Sanitization is needed as we will be using the returned output
 // as the various Service/Ingress object names and k8s requires that the first
 // character has to be an alphabet and that "." becomes hyphens.
-func sanitize(subject string) (string, error) {
+func sanitize(subject string, noIngress bool) (string, error) {
 	// Object names must be following RFC 1035 naming convention
-	if v := validation.IsFullyQualifiedDomainName(nil, subject); v != nil {
-		return "", fmt.Errorf("domain subject not valid domain %#v", v)
+	if !noIngress {
+		if v := validation.IsFullyQualifiedDomainName(nil, subject); v != nil {
+			return "", fmt.Errorf("domain subject not valid domain %#v", v)
+		}
 	}
 
 	hostname := strings.Replace(subject, ".", "-", -1)
@@ -291,5 +296,6 @@ func Execute() error {
 func init() {
 	rootCmd.PersistentFlags().StringVar(&to, "to", "", "address to point to in a host:ip format (eg. 10.0.100.10:8080)")
 	rootCmd.PersistentFlags().StringVar(&namespace, "namespace", "", "Namespace where you want the ingress/service to be created. if unassigned, uses current-context's namespace")
-	rootCmd.PersistentFlags().BoolVar(&tlsAuto, "tls-auto", false, "Set true if want to use cert-manager to automatically assign a tls cert")
+	rootCmd.PersistentFlags().BoolVar(&tlsAuto, "tls-auto", false, "Set true if you want to use cert-manager to automatically assign a tls cert")
+	rootCmd.PersistentFlags().BoolVar(&noIngress, "no-ingress", false, "Set true if you want to skip generating an ingress (headless service mode)")
 }
