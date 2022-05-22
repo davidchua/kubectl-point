@@ -270,13 +270,16 @@ var (
 // as the various Service/Ingress object names and k8s requires that the first
 // character has to be an alphabet and that "." becomes hyphens.
 func sanitize(subject string, noIngress bool) (string, error) {
-	// Object names must be following RFC 1035 naming convention
+
+	// if running on noIngress mode, there's no need to check if the name is a
+	// fqdn as we're not generating an ingress.
 	if !noIngress {
 		if v := validation.IsFullyQualifiedDomainName(nil, subject); v != nil {
 			return "", fmt.Errorf("domain subject not valid domain %#v", v)
 		}
 	}
 
+	// Object names must be following RFC 1035 naming convention
 	hostname := strings.Replace(subject, ".", "-", -1)
 	validateRFC1123 := validation.IsDNS1035Label(hostname)
 	if validateRFC1123 != nil {
