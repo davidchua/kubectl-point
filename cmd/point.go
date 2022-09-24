@@ -29,13 +29,14 @@ import (
 )
 
 var (
-	to             string
-	selectedIssuer string
-	tlsAuto        bool
-	noIngress      bool
-	namespace      string
-	kubeconfig     *string
-	rootCmd        = &cobra.Command{
+	to                string
+	selectedIssuer    string
+	tls               string
+	noIngress         bool
+	namespace         string
+	kubeconfig        *string
+	ingressController string
+	rootCmd           = &cobra.Command{
 		Use:   "point [domain] --to=[ip:port]",
 		Short: "Headless Point",
 		Long:  "\n\nThis command creates an ingress that when accessed, forwards the connection to an external resource transparently. Example:\n\n\tpoint example.org --to=172.169.1.4[:3000]\n\tpoint https://example.org --to=newdomain.com",
@@ -57,6 +58,9 @@ var (
 					log.Fatalf("❌ unable to get config namespace: %#v", err)
 				}
 			}
+
+			// set the ingress annotation
+			ingressAnnotation := fmt.Sprintf("%s.ingress.kubernetes.io", ingressController)
 
 			config, err := kubeConfig.ClientConfig()
 			if err != nil {
@@ -90,7 +94,7 @@ var (
 			portStr := splitTo[1]
 			portProtocol := corev1.Protocol("TCP")
 
-			if tlsAuto {
+			if tls == "auto" {
 
 				ctx := context.Background()
 				cmanager, err := certmanagerv1.NewForConfig(config)
@@ -240,8 +244,42 @@ var (
 					},
 				}
 
+				switch tls {
+
+				case "auto":
+					if selectedIssuer != "" {
+						ingress.Annotations = make(map[string]string)
+						ingress.Annotations["cert-manager.io/cluster-issuer"] = selectedIssuer
+						tlsSecret := fmt.Sprintf("%s-tls", strings.Replace(subject, ".", "-", -1))
+						tlsSpec := networkingv1apply.IngressTLSApplyConfiguration{
+							Hosts:      []string{subject},
+							SecretName: &tlsSecret,
+						}
+						ingress.Spec.TLS = []networkingv1apply.IngressTLSApplyConfiguration{tlsSpec}
+					} else {
+						log.Fatalln("❌ missing or invalid cert-manager issuer")
+
+					}
+
+				case "passthrough":
+					ingress.Annotations = make(map[string]string)
+					ingress.Annotations["cert-manager.io/cluster-issuer"] = selectedIssuer
+
+					passthroughAnnotation := fmt.Sprintf("%s/ssl-passthrough", ingressAnnotation)
+					redirectAnnotation := fmt.Sprintf("%s/ssl-redirect", ingressAnnotation)
+					backendProtocolAnnotation := fmt.Sprintf("%s/backend-protocol", ingressAnnotation)
+
+					ingress.Annotations[passthroughAnnotation] = "true"
+					ingress.Annotations[redirectAnnotation] = "true"
+					ingress.Annotations[backendProtocolAnnotation] = "HTTPS"
+
+				case "false":
+				default:
+					fmt.Printf("⚠ invalid tls selection (%s), skipping ...", tls)
+				}
+
 				// check if --tls=auto is on. if it is, set it to use cert-manager
-				if tlsAuto && selectedIssuer != "" {
+				if tls == "auto" && selectedIssuer != "" {
 					ingress.Annotations = make(map[string]string)
 					ingress.Annotations["cert-manager.io/cluster-issuer"] = selectedIssuer
 					tlsSecret := fmt.Sprintf("%s-tls", strings.Replace(subject, ".", "-", -1))
@@ -259,7 +297,11 @@ var (
 					log.Fatalf("❌ error creating ingress: %#v", err)
 				}
 
-				fmt.Printf("❤ Ingress successfully applied, you can now access it from \033[1;36mhttp://%s\n", args[0])
+				scheme := "http"
+				if tls == "auto" || tls == "passthrough" {
+					scheme = "https"
+				}
+				fmt.Printf("❤ Ingress successfully applied, you can now access it from \033[1;36m%s://%s\n", scheme, args[0])
 			}
 		},
 	}
@@ -299,6 +341,7 @@ func Execute() error {
 func init() {
 	rootCmd.PersistentFlags().StringVar(&to, "to", "", "address to point to in a host:ip format (eg. 10.0.100.10:8080)")
 	rootCmd.PersistentFlags().StringVar(&namespace, "namespace", "", "Namespace where you want the ingress/service to be created. if unassigned, uses current-context's namespace")
-	rootCmd.PersistentFlags().BoolVar(&tlsAuto, "tls-auto", false, "Set true if you want to use cert-manager to automatically assign a tls cert")
+	rootCmd.PersistentFlags().StringVar(&tls, "tls", "false", "Available options auto,passthrough,false. Set auto if you want to use cert-manager to automatically assign a tls cert")
+	rootCmd.PersistentFlags().StringVar(&ingressController, "ingress-controller", "nginx", "Name of ingress controller. Currently supports (nginx)")
 	rootCmd.PersistentFlags().BoolVar(&noIngress, "no-ingress", false, "Set true if you want to skip generating an ingress (headless service mode)")
 }
