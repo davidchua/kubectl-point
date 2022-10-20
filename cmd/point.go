@@ -205,7 +205,7 @@ var (
 			log.Printf("🎁 Endpoint successfully applied")
 
 			if !noIngress {
-				pathType := networkingv1.PathTypeExact
+				pathType := networkingv1.PathTypePrefix
 				defaultPath := "/"
 
 				kindStr = "Ingress"
